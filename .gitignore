@@ -52,3 +52,9 @@ Desktop.ini
 *.log
 *.tmp
 *.bak
+
+
+midterm/dataset/*
+midterm/dataset_clean/*
+midterm/dataset_merged/*
+midterm/dataset_clean.zip

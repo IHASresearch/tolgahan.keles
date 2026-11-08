@@ -1,0 +1,31 @@
+# IHA Teknolojileri dersi - ortak Python ortami (Python 3.10-3.12)
+#
+# Kurulum:
+#   python -m venv .venv
+#   .venv\Scripts\activate            (Linux/macOS: source .venv/bin/activate)
+#   pip install -r requirements.txt
+#
+# NVIDIA GPU varsa torch'u ONCE CUDA surumuyle kurun, sonra bu dosyayi:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+
+# --- Nesne tespiti / goruntu isleme ---
+ultralytics        # YOLO26; torch, opencv, numpy, matplotlib, pandas, pillow, pyyaml ile gelir
+opencv-python       # kamera / video akisi
+pillow
+pyyaml
+supervision         # tespit gorsellestirme, takip, sayma
+roboflow             # dataset indirme (API key ile)
+
+# --- Seri haberlesme / telemetri ---
+pyserial             # Arduino ve telemetri modulleri (week3 data_collector)
+pymavlink         # MAVLink: ArduPilot / PX4 ile haberlesme
+
+# --- Kriptografi ---
+pycryptodome        # AES vb. sifreleme
+
+# --- Veri analizi / not defteri ---
+numpy
+pandas
+matplotlib
+tqdm
+ipykernel                 # VS Code / Jupyter notebook cekirdegi
