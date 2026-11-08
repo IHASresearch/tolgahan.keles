@@ -54,7 +54,6 @@ Desktop.ini
 *.bak
 
 
-midterm/dataset/*
-midterm/dataset_clean/*
-midterm/dataset_merged/*
-midterm/dataset_clean.zip
+# ===== Midterm (buyuk / uretilen dosyalar) =====
+midterm/data/
+midterm/runs/
