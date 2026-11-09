@@ -27,5 +27,6 @@ pycryptodome        # AES vb. sifreleme
 numpy
 pandas
 matplotlib
+scikit-learn         # klasik ML: MLP, olcekleme, metrikler (week5 tinyml)
 tqdm
 ipykernel                 # VS Code / Jupyter notebook cekirdegi
