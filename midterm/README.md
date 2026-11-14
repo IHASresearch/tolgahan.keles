@@ -10,6 +10,8 @@ Projenin adımları:
 4. Modeli TensorRT FP16'ya quantize edip doğruluk ve hız kaybını ölçmek
 5. Kamera veya video üzerinde canlı tespit yapmak
 
+Çalışmanın tamamı ve tüm sonuçlar raporda: [docs/Midterm_Raporu_Tolgahan_Keles.pdf](docs/Midterm_Raporu_Tolgahan_Keles.pdf) (Word hali aynı klasörde). Bu README raporun özetidir; sayılar rapordaki test seti sonuçlarıdır.
+
 ---
 
 ## Klasör yapısı
@@ -120,6 +122,8 @@ Script modelin sınıf sayısına bakarak doğru test setini kendi seçer: 4 sı
 
 ### 1. Veri: v1, tek dataset temizliği (`data_cleaning.py`)
 
+> Bu adım ön çalışmadır; raporda yalnızca burada bulunan veri kalitesi sorunları anlatılıyor, `dataset_clean` ve onunla eğitilen `exp-2` modeli raporda yer almıyor.
+
 İlk olarak tek bir Roboflow dataseti (`military-vehicle-rstvv`) kullandık. Analiz sırasında şu sorunları bulduk:
 
 - **Sınıf adı hatası ve az örnekli sınıf:** `amoured-vehicle` yazım hatası vardı. `artillery` sınıfında ise sadece 49 kutu olduğu için bu sınıf tek başına öğrenilemezdi. İkisi `armored-vehicle` altında birleştirildi.
@@ -158,41 +162,72 @@ Kaynak dağılımı: gzhet 12786, huyen 9434, roman 6561, mamad 4389, view6 3827
 
 ### 3. Fine-tuning
 
-COCO üzerinde önceden eğitilmiş YOLO26 modelleri fine-tune edildi. Tüm modellerde `imgsz=640` ve 100 epoch kullanıldı.
+COCO üzerinde önceden eğitilmiş YOLO26n ve YOLO26l modelleri `dataset_merged` ile Ultralytics Platform'da fine-tune edildi. İkisinde de `imgsz=640`, 100 epoch, MuSGD ve mozaik augmentation (son 10 epoch kapalı) kullanıldı. Doğrulama mAP50-95 değeri en yüksek olan epoch'un ağırlıkları saklandı.
 
-| model | taban | veri | optimizer | precision | recall | mAP50 | mAP50-95 |
-|---|---|---|---|---:|---:|---:|---:|
-| exp-2 | yolo26n | dataset_clean (4 sınıf) | AdamW | 0.793 | 0.741 | 0.787 | 0.594 |
-| exp-3 | yolo26n | dataset_merged (2 sınıf) | MuSGD | 0.807 | 0.702 | 0.753 | 0.494 |
-| exp-4 | yolo26l | dataset_merged (2 sınıf) | MuSGD | 0.828 | 0.761 | 0.802 | 0.563 |
+| model | dosya | batch | en iyi epoch | eğitim süresi | boyut |
+|---|---|---:|---:|---:|---:|
+| YOLO26n | `exp-3.pt` | 275 | 83 | 58.3 dk | 5.5 MB |
+| YOLO26l | `exp-4.pt` | 82 | 62 | 3.38 sa | 53.0 MB |
 
-*(Değerler kendi validation setlerinde ölçüldü. exp-2 ile exp-3/4 farklı veri ve sınıf setleri kullandığı için doğrudan karşılaştırılamaz.)*
+Test setindeki başarım (1847 görüntü, 4564 kutu; PyTorch FP32):
 
-- exp-3, exp-2'ye göre daha zor bir görevde çalışıyor: havadan çekilmiş, küçük nesneler içeren ve çeşitli kaynaklardan gelen görüntüler. Bu yüzden mAP50-95 düşük görünüyor, ama İHA senaryosuna daha uygun.
-- exp-4'te büyük model (`l`) aynı veride mAP50-95'i 0.494'ten 0.563'e çıkardı. Bunun karşılığında model boyutu yaklaşık 10 kat büyüdü (5.5 MB'dan 53 MB'a).
+| model | precision | recall | mAP50 | mAP50-95 |
+|---|---:|---:|---:|---:|
+| YOLO26n | 0.815 | 0.721 | 0.773 | 0.497 |
+| YOLO26l | 0.850 | 0.778 | 0.821 | 0.566 |
+
+Sınıf bazında AP (test seti):
+
+| model | sınıf | AP50 | AP50-95 |
+|---|---|---:|---:|
+| YOLO26n | military-vehicle | 0.901 | 0.631 |
+| YOLO26n | person | 0.646 | 0.362 |
+| YOLO26l | military-vehicle | 0.945 | 0.716 |
+| YOLO26l | person | 0.697 | 0.416 |
+
+- Büyük model (`l`) mAP50-95'i 0.497'den 0.566'ya çıkardı (+0.069). Karşılığında model yaklaşık 10 kat büyüdü.
+- Zor sınıf `person`: havadan bakıldığında insanlar birkaç pikselden oluşuyor, sıklıkla kamuflajlı ve açık veri setlerinde etiketleri tutarsız. Gerçek personelin YOLO26n'de %13'ü, YOLO26l'de %14'ü hiç tespit edilmedi.
+- İki sınıf birbiriyle neredeyse hiç karışmıyor; hatalar arka planla ilgili.
+- YOLO26l 62. epoch'tan sonra hafif aşırı öğrenme gösterdi (doğrulama mAP50-95 0.563'ten 0.550'ye); en iyi epoch'un ağırlıkları saklandığı için sonucu etkilemedi.
 
 ### 4. Quantization: TensorRT FP16
 
-Model, laptop GPU'sunda (6 GB) çalışacak şekilde TensorRT engine olarak export edildi:
+Modeller, laptop GPU'sunda (6 GB) çalışacak şekilde TensorRT engine olarak export edildi:
 
 - **Akış:** `.pt` (FP32) → ONNX (simplify) → TensorRT engine (FP16, batch=1, imgsz=640)
 - **FP16:** Ağırlıklar ve aktivasyonlar 32 bit yerine 16 bit kayan noktalı sayı olarak tutuluyor. INT8'in aksine kalibrasyon verisi gerektirmiyor.
 - `workspace=2` GB ile sınırlandı (6 GB VRAM).
 
-Sonuçlar (`exp-2`, `dataset_clean` test seti: 509 görüntü, 896 kutu; NVIDIA RTX 3050 6 GB Laptop GPU, batch=1):
+Hızlanmanın ne kadarının yarı hassasiyetten, ne kadarının TensorRT'den geldiğini ayırmak için her model üç biçimde ölçüldü (test seti; NVIDIA RTX 3050 6 GB Laptop GPU, batch=1):
 
-| format | mAP50 | mAP50-95 | çıkarım süresi | ~FPS (sadece model) |
-|---|---:|---:|---:|---:|
-| PyTorch `.pt` | 0.778 | 0.586 | 13.6 ms | ~74 |
-| TensorRT FP16 `.engine` | 0.755 | 0.562 | 2.4 ms | ~420 |
-| **fark** | **−0.023** | **−0.024** | **5.8 kat hızlı** | |
+| model | biçim | boyut (MB) | çıkarım (ms) | hızlanma | uçtan uca FPS | mAP50 | mAP50-95 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| YOLO26n | PyTorch FP32 | 5.5 | 10.1 | 1.0 kat | 64 | 0.773 | 0.497 |
+| YOLO26n | PyTorch FP16 | 5.5 | 11.7 | 0.9 kat | 58 | 0.772 | 0.496 |
+| YOLO26n | TensorRT FP16 | 62.0 | 2.6 | 4.0 kat | 123 | 0.772 | 0.496 |
+| YOLO26l | PyTorch FP32 | 53.0 | 31.4 | 1.0 kat | 27 | 0.821 | 0.566 |
+| YOLO26l | PyTorch FP16 | 53.0 | 19.2 | 1.6 kat | 41 | 0.822 | 0.566 |
+| YOLO26l | TensorRT FP16 | 201.6 | 7.1 | 4.4 kat | 79 | 0.818 | 0.567 |
 
-Sınıf bazında mAP50-95 (`.pt` → `.engine`): armored-vehicle 0.745 → 0.735, person 0.301 → 0.283, tank 0.772 → 0.759, truck 0.525 → 0.469.
+*(Çıkarım süresi yalnızca model içindir: boş GPU'da 500 görüntünün ortalaması, ilk 50 görüntü ısınma. Uçtan uca FPS görüntü okuma, ön ve son işlemeyi de içerir. PyTorch FP16 aynı `.pt` dosyasını kullanır; ağırlıklar yüklenirken FP16'ya çevrilir.)*
 
-Sonuç olarak yaklaşık 2 puanlık mAP kaybına karşılık çıkarım 5.8 kat hızlandı. En büyük kayıp, test setinde en az örneği olan `truck` sınıfında (67 kutu) görüldü. Bu hızda model, kamera FPS'inin çok üzerinde çalışıyor ve gerçek zamanlı İHA uygulaması için yeterli.
+- **Doğruluk korunuyor:** mAP50-95 farkı iki modelde de 0.001'in altında (YOLO26n −0.0002, YOLO26l +0.001); sınıf bazındaki farklar ±0.4 puanı geçmiyor.
+- **Hızlanma TensorRT'den geliyor:** PyTorch'ta FP16 büyük modeli yalnızca 1.6 kat hızlandırıyor, küçük modeli ise yavaşlatıyor. Aynı FP16 hassasiyetinde TensorRT, PyTorch FP16'ya göre YOLO26l'de 2.7, YOLO26n'de 4.6 kat daha hızlı. Yani kazancın büyük kısmı yarı hassasiyetten değil, TensorRT'nin grafik optimizasyonlarından (katman birleştirme, çekirdek seçimi) geliyor.
+- **Engine dosyaları daha büyük:** `.engine` yalnızca ağırlıkları değil, hedef GPU için derlenmiş çekirdekleri de içeriyor. Ağırlıkların kendisi yarıya iniyor: ONNX dosyası YOLO26l'de 99.4 MB'tan 49.9 MB'a, YOLO26n'de 9.9 MB'tan 5.0 MB'a düştü.
+- **Darboğaz modelin dışına kayıyor:** Görüntü başına ön işleme yaklaşık 1.2 ms, son işleme 1.5–1.8 ms, diskten okuma yaklaşık 2.5 ms sürüyor. Bu yüzden uçtan uca hızlanma (YOLO26n 1.9, YOLO26l 2.9 kat) model çıkarımındaki hızlanmadan düşük.
+
+#### Ön çalışma: `exp-2` (raporda yok)
+
+İlk quantization denemesi 4 sınıflı `exp-2` modeliyle (YOLO26n, AdamW, `dataset_clean`) yapılmıştı. `dataset_clean` test setinde (509 görüntü, 896 kutu) mAP50-95 0.586'dan 0.562'ye indi, çıkarım 13.6 ms'den 2.4 ms'ye düştü (5.8 kat). `models/exp-2.engine` bu denemenin çıktısıdır ve `detect.py`'nin varsayılan modelidir.
 
 ### 5. Canlı tespit (`detect.py`)
 
 - Kamera, video dosyası ya da RTSP akışı (İHA video linki) kaynak olarak kullanılabilir.
 - Webcam için MJPG formatı zorlanıyor. Aksi halde DirectShow 720p'de sıkıştırmasız YUY2 seçiyor ve FPS yaklaşık 10'a düşüyor.
 - Ekranda FPS, kamera okuma süresi, model süresi ve sınıf başına tespit sayısı gösteriliyor.
+
+### 6. Sınırlılıklar
+
+- Hız ölçümleri bir laptop GPU'sunda yapıldı. Jetson gibi gömülü kartlarda engine'in o donanım için yeniden derlenmesi ve hızın orada ölçülmesi gerekir.
+- INT8 quantization ve küçük nesneler için parçalı çıkarım (SAHI) denenmedi.
+- `person` sınıfının başarımı düşük (AP50-95 0.36–0.42); etiketlerin iyileştirilmesi gerekiyor.
