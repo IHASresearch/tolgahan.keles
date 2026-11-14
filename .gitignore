@@ -48,6 +48,9 @@ venv/
 Thumbs.db
 Desktop.ini
 
+# Microsoft Office kilit dosyalari
+~$*
+
 # ===== Misc =====
 *.log
 *.tmp
@@ -57,3 +60,6 @@ Desktop.ini
 # ===== Midterm (buyuk / uretilen dosyalar) =====
 midterm/data/
 midterm/runs/
+# rapor kaynaklari (LaTeX, betikler, sablon) yerelde kalir; depoda yalnizca midterm/docs/ var
+midterm/paper/
+midterm/*.dotx

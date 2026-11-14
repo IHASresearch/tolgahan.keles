@@ -33,6 +33,9 @@ midterm/
 │   └── exp-4.pt               # YOLO26l, 2 sınıf (dataset_merged)
 ├── videos/
 │   └── test_1.mp4             # demo videosu
+├── docs/                      # ara sınav raporu
+│   ├── Midterm_Raporu_Tolgahan_Keles.pdf
+│   └── Midterm_Raporu_Tolgahan_Keles.docx
 ├── data/                      # (git'te yok) datasetler
 │   ├── dataset_clean/
 │   ├── dataset_merged/
